@@ -85,7 +85,15 @@ def get_opensearch():
     port = 9200
     auth = ('admin', 'admin')
     #### Step 2.a: Create a connection to OpenSearch
-    client = None
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': port}],
+        http_compress=True,
+        http_auth=auth,
+        use_ssl=True,
+        verify_certs=False,
+        ssl_assert_hostname=False,
+        ssl_show_warn=False,
+    )
     return client
 
 
@@ -97,7 +105,7 @@ def index_file(file, index_name):
     root = tree.getroot()
     children = root.findall("./product")
     docs = []
-    for child in children:
+    for doc_idx, child in enumerate(children):
         doc = {}
         for idx in range(0, len(mappings), 2):
             xpath_expr = mappings[idx]
@@ -107,10 +115,16 @@ def index_file(file, index_name):
         if 'productId' not in doc or len(doc['productId']) == 0:
             continue
         #### Step 2.b: Create a valid OpenSearch Doc and bulk index 2000 docs at a time
-        the_doc = None
-        docs.append(the_doc)
+        the_doc = {'_index': index_name, '_id': doc['sku'][0], '_source': doc}
+        if (doc_idx) % 2000:
+            docs.append(the_doc)
+        else:
+            bulk(client, docs)
+            docs_indexed += len(docs)
+            docs = []
 
-    return docs_indexed
+    bulk(client, docs)
+    return docs_indexed + len(docs)
 
 @click.command()
 @click.option('--source_dir', '-s', help='XML files source directory')
