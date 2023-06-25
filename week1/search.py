@@ -110,21 +110,70 @@ def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
     query_obj = {
         'size': 10,
+
         "query": {
-            # Replace me with a query that both searches and filters
-            "bool": {
-                "must": [
+            "function_score": {
+                "query": {
+                    # Replace me with a query that both searches and filters
+                    "bool": {
+                        "must": [
+                            {
+                                "query_string": {
+                                    "query": user_query,
+                                    "fields": ["name^100", "shortDescription^50", "longDescription^10", "department"],
+                                    "phrase_slop": 3
+                                }
+                            }
+                        ],
+                        "filter": filters
+                    
+                    } 
+                },
+                "boost_mode": "multiply", # how _score and functions are combined
+                "score_mode": "sum", # how functions are combined
+                # Use a scaled sales rank as factor in scoring.  This helps popular items rise to the top while still matching on keywords
+                "functions": [
                     {
-                        "query_string": {
-                            "query": user_query,
-                            "fields": ["name^100", "shortDescription^50", "longDescription^10", "department"],
-                            "phrase_slop": 3
+                        "filter": {
+                            "exists": {
+                                "field": "salesRankShortTerm"
+                            }
+                        },
+                        "gauss": {
+                            "salesRankShortTerm": {
+                                "origin": "1.0",
+                                "scale": "100"
+                            }
+                        }
+                    },
+                    {
+                        "filter": {
+                            "exists": {
+                                "field": "salesRankMediumTerm"
+                            }
+                        },
+                        "gauss": {
+                            "salesRankMediumTerm": {
+                                "origin": "1.0",
+                                "scale": "1000"
+                            }
+                        }
+                    },
+                    {
+                        "filter": {
+                            "exists": {
+                                "field": "salesRankLongTerm"
+                            }
+                        },
+                        "gauss": {
+                            "salesRankLongTerm": {
+                                "origin": "1.0",
+                                "scale": "1000"
+                            }
                         }
                     }
-                ],
-                "filter": filters
-            
-            } 
+                ]
+            }
         },
         "aggs": {
             #### Step 4.b.i: create the appropriate query and aggregations here
@@ -167,6 +216,7 @@ def create_query(user_query, filters, sort="_score", sortDir="desc"):
         },
         "sort":[
             {sort: {"order": sortDir}}
-        ]
+        ],
+        "_source": ["productId", "name", "shortDescription", "longDescription", "department", "salesRankShortTerm", "salesRankMediumTerm", "salesRankLongTerm", "regularPrice", "image"]
     }
     return query_obj
