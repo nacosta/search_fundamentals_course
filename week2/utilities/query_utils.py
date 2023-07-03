@@ -160,15 +160,31 @@ def create_query(user_query, filters, sort="_score", sortDir="desc", size=10, in
 def add_spelling_suggestions(query_obj, user_query):
     #### W2, L2, S1
     print("TODO: IMPLEMENT ME")
-    #query_obj["suggest"] = {
-    #    "text": user_query,
-    #    "phrase_suggest": {
-
-    #    },
-    #    "term_suggest": {
-
-    #    }
-    #}
+    query_obj["suggest"] = {
+       "text": user_query,
+       "phrase_suggest": {
+            "phrase": {
+                "field": "suggest.trigrams",
+                "size": 1,
+                "direct_generator": [{
+                    "field": "suggest.trigrams",
+                    "min_word_length": 2,
+                    "suggest_mode": "popular"
+                }],
+                "highlight": {
+                    "pre_tag": "<em>",
+                    "post_tag": "</em>"
+                }
+            }
+       },
+        "term_suggest": {
+            "term": {
+                "field": "suggest.text",
+                "min_word_length": 3,
+                "suggest_mode": "popular"
+            }
+        }
+    }
 
 
 # Given the user query from the UI, the query object we've built so far and a Pandas data GroupBy data frame,
@@ -178,12 +194,23 @@ def add_click_priors(query_obj, user_query, priors_gb):
     try:
         prior_clicks_for_query = priors_gb.get_group(user_query)
         if prior_clicks_for_query is not None and len(prior_clicks_for_query) > 0:
-            click_prior = ""
+            click_prior_boost = prior_clicks_for_query["sku"].value_counts(normalize=True).rename('boost').reset_index()
+            click_prior_terms_boost = click_prior_boost.apply(
+                lambda x: ' '.join(f"{sku}^{boost}" for sku, boost in zip(x['sku'], x['boost']))
+            ).reset_index(name='sku_percentages'
+            ).at[0, "boost"]
             #### W2, L1, S1
             # Create a string object of SKUs and weights that will boost documents matching the SKU
-            print("TODO: Implement me")
+            print(click_prior_terms_boost)
             if click_prior != "":
-                click_prior_query_obj = None # Implement a query object that matches on the ID or SKU with weights of
+                click_prior_query_obj = {   # Implement a query object that matches on the ID or SKU with weights of
+                    "query": {
+                        "query_string": {
+                            "query": click_prior_terms_boost,
+                            "fields": ["sku"]
+                        }
+                    }  
+                }
                 # This may feel like cheating, but it's really not, esp. in ecommerce where you have all this prior data,
                 if click_prior_query_obj is not None:
                     query_obj["query"]["function_score"]["query"]["bool"]["should"].append(click_prior_query_obj)

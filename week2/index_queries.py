@@ -4,6 +4,7 @@ import click
 import pandas as pd
 from opensearchpy import OpenSearch
 from opensearchpy.helpers import bulk
+from opensearchpy.helpers.errors import BulkIndexError
 import string
 
 import logging
@@ -77,10 +78,16 @@ def main(source_file: str, index_name: str):
         }
         docs.append({'_index': index_name , '_source': doc})
         if len(docs) % 10 == 0:
-            bulk(client, docs, request_timeout=60)
+            try:
+                bulk(client, docs, request_timeout=60)
+            except BulkIndexError:
+                pass
             docs = []
     if len(docs) > 0:
-        bulk(client, docs, request_timeout=60)
+        try:
+            bulk(client, docs, request_timeout=60)
+        except BulkIndexError:
+            pass
     toc = time.perf_counter()
     logger.info(f'Done indexing {df.shape[0]} records. Total time: {((toc-tic)/60):0.3f} mins.')
 

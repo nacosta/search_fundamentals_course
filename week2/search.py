@@ -64,7 +64,27 @@ def autocomplete():
         if prefix is not None:
             type = request.args.get("type", "queries") # If type == queries, this is an autocomplete request, else if products, it's an instant search request.
             ##### W2, L3, S1
-            search_response = None
+            suggest_obj = {
+                "suggest":{
+                    "autocomplete":{
+                        "prefix": prefix,
+                        "completion":{
+                            "field": "suggest",
+                            "skip_duplicates": True
+                        }
+                    }
+                },
+                "_source": "canonical"
+            }
+
+            if type == "queries":
+                index_name = "bbuy_queries"
+            elif type == "products":
+                index_name = "bbuy_products"
+            else:
+                index_name = "bbuy_queries"
+
+            search_response = get_opensearch().search(body=suggest_obj, index=index_name)
             print("TODO: implement autocomplete AND instant search")
             if (search_response and search_response['suggest']['autocomplete'] and search_response['suggest']['autocomplete'][0]['length'] > 0): # just a query response
                 results = search_response['suggest']['autocomplete'][0]['options']
@@ -106,8 +126,9 @@ def query():
 
         query_obj = qu.create_query(user_query,  [], sort, sortDir, size=20)  # We moved create_query to a utility class so we could use it elsewhere.
         ##### W2, L1, S2
-
+        qu.add_click_priors(query_obj, user_query, prior_clicks)
         ##### W2, L2, S2
+        qu.add_spelling_suggestions(query_obj, user_query)
         print("Plain ol q: %s" % query_obj)
     elif request.method == 'GET':  # Handle the case where there is no query or just loading the page
         user_query = request.args.get("query", "*")
@@ -121,9 +142,9 @@ def query():
             (filters, display_filters, applied_filters) = process_filters(filters_input)
         query_obj = qu.create_query(user_query,  filters, sort, sortDir, size=20)
         #### W2, L1, S2
-
+        qu.add_click_priors(query_obj, user_query, prior_clicks)
         ##### W2, L2, S2
-
+        qu.add_spelling_suggestions(query_obj, user_query)
     else:
         query_obj = qu.create_query("*", "", [], sort, sortDir, size=100)
 
